@@ -1,0 +1,82 @@
+Thu 12 Nov 2009 10:47:30 CET - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.8
+    - Fixed warning message if the host to be acknowledged wasn't found
+
+Tue 10 Nov 2009 13:48:45 CET - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.7
+    - Added ack command to acknowledge host and service problems
+    
+Sun  1 Nov 2009 16:03:26 CET - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    - Sending idle presence after 'bot_show_idle_after' minutes
+
+Thu 29 Okt 2009 17:00:11 CET - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    - Bot commands are now case insensitive
+
+Tue 20 Okt 2009 17:21:45 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.6
+    - Few cosmetic changes
+
+Thu 15 Okt 2009 22:18:11 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.5.4
+    - Fixed a bug where the lines of ReportStatusDetails weren't cleared
+
+Tue 13 Okt 2009 15:54:19 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.5.3
+    - Added status information of hosts
+    - Added status details of hosts
+
+Tue 13 Okt 2009 10:34:01 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.5.2
+    - Added Robin's patch that fixes/improves the documenation
+    - Fixed a bug, not displaying the Version korrektly
+
+Thu  8 Okt 2009 22:34:34 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.5.1
+    - use Module::Build instead of MakeMaker
+    - Added 'info' and 'help' to perldoc
+    - Move bot commandset to hash - Minor cosmetic changes
+
+Thu  8 Okt 2009 15:29:50 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    - Added Robin's patch that ...
+      - adds "info" command
+      - adds "help" command
+      - fixes that a message to a JID was of wrong type
+    
+Fri 18 Sep 2009 15:13:28 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.5
+    - Fixed some typos in INSTALL
+    - Output now unbufferd (better if running under supervise)
+
+Sun 13 Sep 2009 23:10:03 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    - handle INT and TERM signals
+    - try to reconnect if server connection dies
+    - XMPP resource is now configurable
+    - details command shows if a problem has been acknowledged
+
+Sat 12 Sep 2009 15:10:23 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    - Don't start without a JID
+    - more log messages
+
+Wed  2 Sep 2009 16:15:48 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    - Added notfiy-by-pipe example to docu
+    - Fixed some docu typos
+    - Added config default values
+
+Fri 21 Aug 2009 18:22:59 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.4
+    - Added response to messages sent to the bot
+    - Added "status" command
+    - Added "details" command
+    - Added YAML config file and Getopt logic
+    - Added documentation
+
+Earlier changes:
+
+0.3
+    - Added ability to send messages to MUCs and JIDs
+
+0.2 
+    - switch from Net::XMPP2 to AnyEvent::XMPP
+
+0.1 
+    - first try to submit nagios notifications to a Jabber Account

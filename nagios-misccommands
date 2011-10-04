@@ -1,0 +1,10 @@
+# 'notify-by-pipe' command definition(s)
+define command {
+        command_name                    service-notify-by-pipe
+        command_line                    /usr/bin/printf "%b" "*$NOTIFICATIONTYPE$* $SERVICEDESC$ on $HOSTALIAS$ $SERVICESTATE$\n" >> /opt/nagios/var/rw/nagibot.fifo 2>&1
+}
+
+define command {
+        command_name                    host-notify-by-pipe
+        command_line                    /usr/bin/printf "%b" "*$NOTIFICATIONTYPE$* $HOSTNAME$ is $HOSTSTATE$\n" >> /opt/nagios/var/rw/nagibot.fifo 2>&1
+}

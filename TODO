@@ -1,0 +1,7 @@
+TODOs
+- split the script into Module and mini script
+- add ability to safely react to XMPP errors
+
+more IDEAS
+- add some syntax to acknowlede alarms
+- commands should be case-insenstive

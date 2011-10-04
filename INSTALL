@@ -1,0 +1,41 @@
+If you install on a Debian squeeze, prepare your system using the following
+commands:
+
+    aptitude install libyaml-perl libsys-cpuload-perl libanyevent-perl \
+                     libxml-parser-perl libauthen-sasl-perl \
+                     libnet-libidn-perl libobject-event-perl \
+                     libxml-writer-perl
+
+    cpan -i Nagios::Status::HostStatus
+    cpan -i Nagios::Status::ServiceStatus
+
+then (or if you habe any other kind of operating system), Do a
+
+    perl Build.PL  (watch for missing prerequisites in the output!)
+    ./Build
+    ./Build install
+
+and create/copy your configuration to an appropriate place. Change the
+configuration to met your environment.
+
+You can find sample nagios commands in the file nagios-misccommands.
+
+You may want to run the bot unter supervise control:
+
+mkdir /var/log/nagibot
+mkdir -p /opt/nagios/supervise/nagibot/log
+chown nagios /var/log/nagibot
+
+cat > /opt/nagios/supervise/nagibot/run <<EOF
+#!/bin/sh
+exec /command/setuidgid nagios /usr/bin/nagibot.pl -vvv -c /opt/nagios/etc/nagibot.conf yourbotjid@example.com 2>&1
+EOF
+chmod 600 /opt/nagios/supervise/nagibot/run
+
+cat > /opt/nagios/supervise/nagibot/log/run <<EOF
+#!/bin/sh
+exec /command/setuidgid nagios /command/multilog t /var/log/nagibot
+EOF
+chmod 600 /opt/nagios/supervise/nagibot/log/run
+
+ln -s /opt/nagios/supervise/nagibot /service/

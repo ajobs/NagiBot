@@ -1,0 +1,10 @@
+MANIFEST			This list of files
+INSTALL
+README
+TODO
+Changes
+Build.PL
+nagibot-example.conf
+nagibot.pl
+nagios-misccommands
+META.yml
