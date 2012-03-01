@@ -32,12 +32,14 @@ use Nagios::Status::HostStatus;
 use Text::ParseWords;
 #use Data::Dumper;
 use Sys::CpuLoad;
+use POSIX qw(setsid);
+use File::Pid;
 
 use vars qw($event $timer_event $io_event $connection $disco $muc $terminating);
 
-use vars qw($jid $rooms $jids %default %bot_command $config $config_locations $VERSION $configfile $verbose $password);
+use vars qw($jid $rooms $jids %default %bot_command $config $config_locations $VERSION $configfile $verbose $password $daemonize $pidfile);
 $|=1;
-$VERSION = '0.8';
+$VERSION = '0.8.1';
 $verbose = 1;
 $terminating = 0;
 $config_locations = '.,/etc,/usr/local/etc,/opt/local/etc,/opt/nagios/etc,/usr/local/nagios/etc';
@@ -69,6 +71,7 @@ Getopt::Long::Configure('bundling');
 GetOptions (
     'verbose|v'    => sub { $verbose ++ }, 
     'quiet|q'      => sub { $verbose = 0 },
+    'daemon|d'     => sub { $daemonize ++ },
     'version|V'    => sub { print "$VERSION\n"; exit 0; },
     'config|c=s'   => \$configfile,
     'password|p=s' => \$password,
@@ -113,6 +116,36 @@ foreach my $k (keys %default) {
 #--- and adjust some values for internal use
 $config->{'password'}             = $password if $password;
 $config->{'bot_show_idle_after'} *= 60;
+
+#--- daemonize
+if ($daemonize) {
+    umask 0;
+    defined( my $pid = fork ) or die "Can't fork: $!";
+    exit if $pid;
+
+    # dissociate this process from the controlling terminal that started it and stop being part
+    # of whatever process group this process was a part of.
+    POSIX::setsid() or die "Can't start a new session.";
+
+    my $pidFileName = $config->{'pid_file'};
+    if (!defined $pidFileName and $jid =~ /^([^@]+)/) {
+        $pidFileName = "/var/run/nagibot/$1.pid";
+    }
+    $pidfile = File::Pid->new( { file => $pidFileName, } );
+    eval { $pid = $pidfile->running };
+    unless (defined $pid) {
+        warn "Removing stale pid file $pidFileName";
+        $pidfile->remove;
+        $pidfile->pid($$);
+    }
+    die "NagiBot is already running" if $pid;
+    $pidfile->write or die "Can't write PID file $pidFileName: $!";
+
+    # FIXME: we should switch to a logging facility instead of just silencing the bot
+    open STDIN,  '<',  '/dev/null' or die "Can't read /dev/null: $!";
+    open STDOUT, '>>', '/dev/null' or die "Can't write to /dev/null: $!";
+    open STDERR, '>>', '/dev/null' or die "Can't write to /dev/null: $!";
+}
 
 
 #--- install signal handler
@@ -173,7 +206,12 @@ $connection->reg_cb (
 
                 print "Message (" . $room->jid .") from " . $msg->from . ": " . $msg->any_body . "\n" if $verbose > 2;
                 return unless $msg->any_body =~ /^\@/;
-                my $cmd = $1 if $msg->any_body =~ /^\@nagibot (.*)$/i;
+
+                my $my_name = 'nagibot';
+                if (my $me = $room->get_me) {
+                    $my_name = lc $me->nick;
+                }
+                my $cmd = $1 if $msg->any_body =~ /^\@$my_name\s+(.*)$/i;
                 return unless $cmd;
                 &SetIdlePresence(0);
                 &SendRoomMessage($room, &ProcessBotCommand ($msg->from, $cmd));
@@ -276,6 +314,8 @@ undef $connection;
 goto CON unless ($terminating);
 
 print "Quitting.\n" if $verbose;
+
+$pidfile->remove if $pidfile;
 
 exit 0;
 
@@ -617,6 +657,10 @@ Be verbose. You can specify this more than once to increase verbosity.
 Set verbosity to zero. Error messages are printed but no warnings or
 informational messages will be shown.
 
+=item B<-d>, B<--daemon>
+
+Fork and run in background.
+
 =item B<-c> I<FILE>, B<--config> I<FILE>
 
 Configuration file to use. See L<"CONFIGUATION FILE"> for details.
@@ -703,6 +747,11 @@ objects (defaults to /usr/local/nagios/var/status.dat).
 =item B<password>
 
 Logon password of the bot's JID.
+
+=item B<pid_file>
+
+Name of the pid file if the bot forks into background. (defaults to 
+/var/run/nagibot/<local-part-of-jid>.pid)
 
 =back
 

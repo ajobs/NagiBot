@@ -9,9 +9,10 @@ Module::Build->new (
   requires          => {
     'AnyEvent'                      => 0,
     'AnyEvent::XMPP'                => '< 0.6',
-    'YAML'                          => 0,
+    'File::Pid'                     => 0,  
     'Nagios::Status::ServiceStatus' => 0,
     'Nagios::Status::HostStatus'    => 0,
     'Sys::CpuLoad'                  => 0,
+    'YAML'                          => 0,
   },
 )->create_build_script;
