@@ -4,6 +4,7 @@ Fri  2 Mar 2012 00:22:32 CET - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
     - Added pid check to prevent forking more than once
     - In a MUC the bot now responds if it is called by its nick (Until now
       it only responds to @nagibot). Idea by Brian Menges.
+    - Added init.d start script (by Brian Menges).
 
 Thu 12 Nov 2009 10:47:30 CET - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
     * Version 0.8
