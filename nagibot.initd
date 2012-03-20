@@ -1,0 +1,206 @@
+#! /bin/sh
+#			Written by Brian Menges <bmenges@gogrid.com>.
+
+### BEGIN INIT INFO
+# Provides:		nagibot
+# Required-Start:	$local_fs $remote_fs $syslog $named $network $time
+# Required-Stop:	$local_fs $remote_fs $syslog $named $network
+# Should-Start:      
+# Should-Stop:       
+# Default-Start:	2 3 4 5
+# Default-Stop:		0 1 6
+# Short-Description:	NagiBot which communicates Nagios status messages into XMPP chat channels
+# Description:		NagiBot which communicates Nagios status messages into XMPP chat channels
+### END INIT INFO
+
+set -e
+
+if ! [ -x "/lib/lsb/init-functions" ]; then
+  . /lib/lsb/init-functions
+else
+  echo "E: /lib/lsb/init-functions not found, lsb-base (>= 3.0-6) needed"
+  exit 1
+fi
+
+DAEMON=/etc/nagios3/nagibot/nagibot.pl
+NAME="nagibot"
+DESC="NagiBot v0.8"
+NAGIBOTCFG="/etc/nagios3/nagibot/nagibot.conf"
+NAGIBOTJID="nagibot@domain.tld"
+
+[ -x "$DAEMON" ] || exit 0
+[ -r "$NAGIBOTCFG" ] || exit 0
+
+log()
+{
+  case "$1" in
+    [[:digit:]]*) success=$1; shift;;
+    *) :;;
+  esac
+  log_action_begin_msg "$1"; shift
+  log_action_end_msg ${success:-0} "$*"
+}
+
+get_config () {
+  if [ "$2" ]; then
+    set -- `grep ^$1 $2 | sed 's@:@ @'`
+  else
+    set -- `grep ^$1 $NAGIBOTCFG | sed 's@:@ @'`
+  fi
+  shift
+  echo $*
+}
+
+check_config () {
+  if [ -r "$NAGIBOTCFG" ]; then
+    log_file="/var/log/nagibot.log"
+    log_dir="$(dirname $log_file)"
+    return 0    # Config is ok
+  else
+    # config is not okay, so let's barf the error to the user
+    echo "Config file is not okay"
+    return 1
+  fi
+}
+
+check_started () {
+  if [ -f "$THEPIDFILE" ]; then
+    pid="$(cat $THEPIDFILE)"
+    if [ "$pid" ] && kill -0 $pid >/dev/null; then
+      return 0    # Is started
+    fi
+  fi
+  return 1      # Isn't started
+}
+
+check_named_pipe () {
+  nagibotpipe="/etc/nagios3/nagibot.fifo"
+  if [ -p "$nagibotpipe" ]; then
+    return 1   # a named pipe exists
+  else
+    mkfifo -m 0660 $nagibotpipe
+    chown nagios:nagios $nagibotpipe
+    return 1   # a named pipe exists
+  fi
+}
+
+if [ ! -f "$NAGIBOTCFG" ]; then
+  log_failure_msg "There is no configuration file for $NAME."
+  exit 6
+fi
+
+THEPIDFILE="/var/run/$NAME/$NAME.pid"
+[ -n "$THEPIDFILE" ] || THEPIDFILE='/var/run/$NAME/$NAME.pid'
+
+start () {
+  DIRECTORY=$(dirname $THEPIDFILE)
+  [ ! -d $DIRECTORY ] && mkdir -p $DIRECTORY
+  chown nagios:nagios $DIRECTORY
+
+  if ! check_started; then
+#    if ! check_named_pipe; then
+#      log_action_msg "named pipe exists - OK"
+#      rm -f $nagiospipe
+#    fi
+    if check_config; then
+      start_daemon -p $THEPIDFILE $DAEMON -q -d -c $NAGIBOTCFG $NAGIBOTJID
+      ret=$?
+    else
+      log_failure_msg "errors in config!"
+      log_end_msg 1
+      exit 1
+    fi
+  else
+    log_warning_msg "already running!"
+  fi
+  return $ret
+}
+
+stop () {
+    killproc -p $THEPIDFILE
+    ret=$?
+    if [ `pidof -x $NAME.pl | wc -l ` -gt 0 ]; then
+        echo -n "Waiting for $NAME daemon to die.."
+        cnt=0
+        while [ `pidof -x $NAME.pl | wc -l ` -gt 0 ]; do
+            cnt=`expr "$cnt" + 1`
+            if [ "$cnt" -gt 15 ]; then
+                kill -9 `pidof -x $NAME.pl`
+                break
+            fi
+            sleep 1
+            echo -n "."
+        done
+    fi
+    echo
+    if [ -r "$THEPIDFILE" ]; then
+      rm -f $THEPIDFILE
+    fi
+    if [ -n "$ret" ]; then
+      return $ret
+    else
+      return $?
+    fi
+}
+
+status()
+{
+  log_action_begin_msg "checking $NAME"
+  if check_started; then
+    log_action_end_msg 0 "running"
+  else
+    if [ -e "$THEPIDFILE" ]; then
+      log_action_end_msg 1 "$DAEMON failed"
+      exit 1
+    else
+      log_action_end_msg 0 "not running"
+      exit 3
+    fi
+  fi
+}
+
+
+reload () {
+  # Check first
+  if check_config; then
+    if check_started; then
+      killproc -p $THEPIDFILE $DAEMON 1
+    else
+      log_warning_msg "Not running."
+    fi
+  else
+    log_failure_msg "errors in config!"
+    log_end_msg 6
+    exit 6
+ fi
+}
+
+case "$1" in
+  start)
+    log_daemon_msg "Starting $DESC" "$NAME"
+    start
+    log_end_msg $?
+    ;;
+  stop)
+    log_daemon_msg "Stopping $DESC" "$NAME"
+    stop
+    log_end_msg $?
+  ;;
+  restart)
+    log_daemon_msg "Restarting $DESC" "$NAME"
+    stop
+    if [ -z "$?" -o "$?" = "0" ]; then
+      start
+    fi
+    log_end_msg $?
+  ;;
+  status)
+    status
+    ;;
+  *)
+    log_failure_msg "Usage: $0 {start|stop|restart|status}" >&2
+    exit 1
+  ;;
+esac
+
+exit 0
