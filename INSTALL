@@ -39,3 +39,7 @@ EOF
 chmod 600 /opt/nagios/supervise/nagibot/log/run
 
 ln -s /opt/nagios/supervise/nagibot /service/
+
+The script is also able to fork into background. An example init.d script is provided
+as nagibot.initd.
+

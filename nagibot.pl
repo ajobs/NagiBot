@@ -61,6 +61,7 @@ $config_locations = '.,/etc,/usr/local/etc,/opt/local/etc,/opt/nagios/etc,/usr/l
     ack         => \&AcknowledgeNagiosProblem,
     acknowledge => \&AcknowledgeNagiosProblem,
     details     => \&ReportNagiosStatusDetails,
+    recheck     => \&RecheckNagiosProblem,
     help        => \&ReportHelp,
     info        => \&ReportInfo,
     status      => \&ReportNagiosStatus,
@@ -328,6 +329,7 @@ sub SignalHandler {
     $connection->disconnect("$sig signal") if $connection;
 }
 
+
 sub StartTimer {
     my $seconds = shift;
 
@@ -342,6 +344,7 @@ sub StartTimer {
         },
     );
 }
+
 
 sub SetIdlePresence {
     my $idle = shift;
@@ -361,6 +364,7 @@ sub SetIdlePresence {
         } : undef,
     );
 }
+
 
 sub SendRoomMessage {
     my ($room, $msg) = @_;
@@ -385,11 +389,12 @@ sub ProcessBotCommand {
 sub ReportHelp {
     my $msg = "NagiBot $VERSION Help\n";
     $msg .= "Available commands:\n";
-    $msg .= "  status\t- basic status information.\n";
-    $msg .= "  details\t- detailed information about anything that is not okay.\n";
-    $msg .= "  info\t- basic system info\n";
+    $msg .= "  status\n\t\t- basic status information.\n";
+    $msg .= "  details [<host> [all]]\n\t\t- detailed information about something (or anything) that is not okay.\n";
     $msg .= "  ack [<service>@]<host> <comment>\n\t\t- acknowledge service/host problem\n"; 
-    $msg .= "  help\t- you just typed 'help', didn't you?";
+    $msg .= "  recheck [<service>@]<host>\n\t\t- schedule a check of the service/host\n";
+    $msg .= "  info\n\t\t- basic system info\n";
+    $msg .= "  help\n\t\t- you just typed 'help', didn't you?";
 
     return $msg;
 }
@@ -435,21 +440,32 @@ sub ReportNagiosStatus {
 
 
 sub ReportNagiosStatusDetails {
-    use vars qw( $service_status $host_status @lines );
+    my $from_jid = shift @_;
+    my @params = shellwords(@_);
+    use vars qw( $service_status $host_status $host $all @lines );
 
+    # Syntax:  details
+    #   OR  
+    # Syntax:  details host
+    $host = $params[0] || undef;
+    $all  = ($params[1] and lc $params[1] eq 'all') || undef;
     @lines = ();
 
     $host_status = Nagios::Status::HostStatus->new($config->{'nagios_status_log_file'});
     if ($host_status) {
+        my $up = $host_status->check_up;
         my $dn = $host_status->check_down;
         my $un = $host_status->check_unreachable;
 
+        $up = () unless $all;
+
         my $status;
         push @lines, "Nagios Host Details";
-        if ($dn or $un) {
-            foreach my $s ("DOWN",@$dn, "UNREACHABLE",@$un) {
+        if ($dn or $un or $all) {
+            foreach my $s ("UP",@$up, "DOWN",@$dn, "UNREACHABLE",@$un) {
                 next unless defined $s;
                 $status = $s, next unless ref($s);
+                next if ($host and $host ne $s->get_hostname);
 
                 my $line = $s->get_hostname . " " . $status;
 
@@ -465,16 +481,19 @@ sub ReportNagiosStatusDetails {
 
     $service_status = Nagios::Status::ServiceStatus->new($config->{'nagios_status_log_file'});
     if ($service_status) {
+        my $ok = $service_status->check_ok;
         my $cr = $service_status->check_critical;
         my $wa = $service_status->check_warning;
         my $un = $service_status->check_unknown;
+        $ok = () unless $all;
 
         my $status;
         push @lines, "Nagios Service Details";
-        if ($cr or $wa or $un) {
-            foreach my $s ("CRITICAL",@$cr, "WARNING",@$wa, "UNKNOWN",@$un) {
+        if ($cr or $wa or $un or $all) {
+            foreach my $s ("OK",@$ok, "CRITICAL",@$cr, "WARNING",@$wa, "UNKNOWN",@$un) {
                 next unless defined $s;
                 $status = $s, next unless ref($s);
+                next if ($host and $host ne $s->get_hostname);
 
                 my $line = $s->get_hostname . " " . $s->get_attribute('service_description') . " " . $status;
                 $line .= " (ACK)" if $s->get_attribute('problem_has_been_acknowledged');
@@ -500,6 +519,7 @@ sub ReportInfo {
 
     return $msg;
 }
+
 
 sub AcknowledgeNagiosProblem {
     my $from_jid = shift @_;
@@ -597,6 +617,79 @@ sub AcknowledgeNagiosProblem {
 
     return $msg;
 }
+
+
+sub RecheckNagiosProblem {
+    my $from_jid = shift @_;
+    my @params = shellwords(@_);
+    my ($host, $service) = undef;
+    my $msg = 'Something weird happened';
+
+    # Syntax:  recheck service@host
+    #   OR  
+    # Syntax:  recheck host
+    if ($params[0] =~ /\@/) {
+        ($service, $host) = split('@', $params[0]);
+    }
+    else {
+        $host = $params[0];
+    }
+    shift @params;
+ 
+    if ($service) {
+        my $status = Nagios::Status::ServiceStatus->new($config->{'nagios_status_log_file'});
+        if ($status) {
+            $msg = '';
+            my $cr = $status->check_critical;
+            my $wa = $status->check_warning;
+            my $un = $status->check_unknown;
+            my $ok = $status->check_ok;
+            foreach my $s (@$cr, @$wa, @$un, @$ok) {
+                next unless $s->get_hostname eq $host;
+                next unless $s->get_attribute('service_description') eq $service;
+
+                my $ack = join (';',
+                    'SCHEDULE_FORCED_SVC_CHECK',
+                    $host,
+                    $service,
+                    time
+                );
+                $msg = &WriteExternalNagiosCommand($ack);
+            }
+            $msg = 'Service not found' unless $msg;
+        }
+        else {
+            $msg .= "ERROR: Cannot create Nagios::Status::ServiceStatus object";
+        }
+    }
+    else {
+        # do the same for a host ack
+        my $host_status = Nagios::Status::HostStatus->new($config->{'nagios_status_log_file'});
+        if ($host_status) {
+            $msg = '';
+            my $dn = $host_status->check_down;
+            my $un = $host_status->check_unreachable;
+            my $up = $host_status->check_up;
+            foreach my $s (@$dn, @$un, @$up) {
+                next unless $s->get_hostname eq $host;
+
+                my $ack = join (';',
+                    'SCHEDULE_FORCED_HOST_CHECK',
+                    $host,
+                    time
+                );
+                $msg = &WriteExternalNagiosCommand($ack);
+            }
+            $msg = 'Host not found' unless $msg;
+        }
+        else {
+            $msg .= "ERROR: Cannot create Nagios::Status::HostStatus object";
+        }
+    }
+
+    return $msg;
+}
+
 
 sub WriteExternalNagiosCommand {
     my $ack_msg = shift;
@@ -798,11 +891,14 @@ command.
 The bot reports the current Nagios(tm) status. It reports how many services are
 OK and how many services are in WARNING, CRITICAL or UNKNOWN state.
 
-=item B<details>
+=item B<details> [<host> [all]]
 
 The bot reports details about the services that are in a state other than OK.
 It reports the hostname, the name of the service and its last state followed by
 a new line and the last plugin output.
+
+If <host> is given only the problems for the given host are displayed. You can
+add an 'all' the the command to display the status of all services of <host>.
 
 =item B<info>
 
@@ -812,6 +908,10 @@ of the Nagios(tm) host system is reported.
 =item B<ack> [<service>@]<host> <comment>
 
 The bot will acknowledge the given host or service problem.
+
+=item B<recheck> [<service>@]<host>
+
+The bot will schedule a check of the given host or service.
 
 =back
 
