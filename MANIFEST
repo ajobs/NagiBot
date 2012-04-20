@@ -5,6 +5,6 @@ TODO
 Changes
 Build.PL
 nagibot-example.conf
+nagibot.initd
 nagibot.pl
 nagios-misccommands
-META.yml

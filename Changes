@@ -1,11 +1,17 @@
+Tue 20 Apr 2012 21:10:34 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.8.3
+    - The previous version wasn't packend and tagged correctly. No changes just
+      cleaning up the mess
+
 Tue 20 Mar 2012 14:24:54 CET - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
-    * Version 0.8.1
+    * Version 0.8.2
     - Added init.d start script (by Brian Menges).
     - Added recheck command (by Brian Menges).
     - Added host limitation for details command.
     - Added all to details <host> command to display all services for a host.
 
 Fri  2 Mar 2012 00:22:32 CET - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.8.1
     - Added daemonize patch (by Brian Menges)
     - Added pid check to prevent forking more than once
     - In a MUC the bot now responds if it is called by its nick (Until now

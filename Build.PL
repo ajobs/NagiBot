@@ -6,6 +6,9 @@ Module::Build->new (
   sign              => 1,
   script_files      => 'nagibot.pl',
   dist_version_from => 'nagibot.pl',
+  configure_requires => {
+    'Module::Build'                 => '0.38',
+  },
   requires          => {
     'AnyEvent'                      => 0,
     'AnyEvent::XMPP'                => '< 0.6',

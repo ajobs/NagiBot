@@ -39,7 +39,7 @@ use vars qw($event $timer_event $io_event $connection $disco $muc $terminating);
 
 use vars qw($jid $rooms $jids %default %bot_command $config $config_locations $VERSION $configfile $verbose $password $daemonize $pidfile);
 $|=1;
-$VERSION = '0.8.1';
+$VERSION = '0.8.3';
 $verbose = 1;
 $terminating = 0;
 $config_locations = '.,/etc,/usr/local/etc,/opt/local/etc,/opt/nagios/etc,/usr/local/nagios/etc';
