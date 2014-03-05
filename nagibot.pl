@@ -208,7 +208,6 @@ $connection->reg_cb (
                 return if $is_echo;
 
                 print "Message (" . $room->jid .") from " . $msg->from . ": " . $msg->any_body . "\n" if $verbose > 2;
-                return unless $msg->any_body =~ /^\@/;
 
                 my $my_name = 'nagibot';
                 if (my $me = $room->get_me) {
