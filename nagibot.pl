@@ -214,7 +214,6 @@ $connection->reg_cb (
                 if (my $me = $room->get_me) {
                     $my_name = lc $me->nick;
                 }
-                my $cmd = $1 if $msg->any_body =~ /^\@$my_name\s+(.*)$/i;
                 my $cmd = $1 if $msg->any_body =~ /^(?:\@$my_name|$my_name:)\s+(.*)$/i;
                 return unless $cmd;
                 &SetIdlePresence(0);
