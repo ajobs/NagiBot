@@ -17,5 +17,6 @@ Module::Build->new (
     'Nagios::Status::HostStatus'    => 0,
     'Sys::CpuLoad'                  => 0,
     'YAML'                          => 0,
+    'HTML::Entities'                => 0,
   },
 )->create_build_script;

@@ -34,12 +34,13 @@ use Text::ParseWords;
 use Sys::CpuLoad;
 use POSIX qw(setsid);
 use File::Pid;
+use HTML::Entities;
 
 use vars qw($event $timer_event $io_event $connection $disco $muc $terminating);
 
 use vars qw($jid $rooms $jids %default %bot_command $config $config_locations $VERSION $configfile $verbose $password $daemonize $pidfile);
 $|=1;
-$VERSION = '0.8.3';
+$VERSION = '0.8.4';
 $verbose = 1;
 $terminating = 0;
 $config_locations = '.,/etc,/usr/local/etc,/opt/local/etc,/opt/nagios/etc,/usr/local/nagios/etc';
@@ -55,6 +56,7 @@ $config_locations = '.,/etc,/usr/local/etc,/opt/local/etc,/opt/nagios/etc,/usr/l
     nagios_cmd_file        => '/usr/local/nagios/var/rw/nagios.cmd',
     nagios_msg_fifo        => '/usr/local/nagios/var/rw/nagibot.fifo',
     nagios_status_log_file => '/usr/local/nagios/var/status.dat',
+    htmlify_msg            => 0,
 );
 
 %bot_command = (
@@ -213,6 +215,7 @@ $connection->reg_cb (
                     $my_name = lc $me->nick;
                 }
                 my $cmd = $1 if $msg->any_body =~ /^\@$my_name\s+(.*)$/i;
+                my $cmd = $1 if $msg->any_body =~ /^(?:\@$my_name|$my_name:)\s+(.*)$/i;
                 return unless $cmd;
                 &SetIdlePresence(0);
                 &SendRoomMessage($room, &ProcessBotCommand ($msg->from, $cmd));
@@ -291,12 +294,14 @@ $io_event = AnyEvent->io (
                 return;
             }
             my $msg =  $r->make_message (body => $input);
+            &HtmlifyMsg($msg, $input) if $config->{'htmlify_msg'};
             $msg->send ();
         }
 
         # send message to all users
         foreach my $ujid (@$jids) {
             my $msg =  AnyEvent::XMPP::IM::Message->new (to => $ujid, body => $input, type => 'chat');
+            &HtmlifyMsg($msg, $input) if $config->{'htmlify_msg'};
             $msg->send ($connection);
         }
 
@@ -701,6 +706,28 @@ sub WriteExternalNagiosCommand {
     return 'OK';
 }
 
+
+sub HtmlifyMsg {
+    my ($msg, $text) = @_;
+
+    # HTMLify
+    my $output = encode_entities($text);
+    $output =~ s#\b(OK|UP)\b#<span style='color:\#008000;font-weight:bold'>$1</span>#;
+    $output =~ s#\b(WARNING)\b#<span style='color:\#ffa500;font-weight:bold;'>$1</span>#;
+    $output =~ s#\b(CRITICAL|DOWN)\b#<span style='color:\#ff0000;font-weight:bold;'>$1</span>#;
+    $output =~ s#\b(UNREACHABLE|UNKNOWN)\b#<span style='color:\#e066ff;font-weight:bold;'>$1</span>#;
+    $output = "<p>$output</p>";
+
+    $msg->append_creation (sub {
+            my ($w) = @_;
+            $w->startTag (['http://jabber.org/protocol/xhtml-im','html']);
+            $w->startTag (['http://www.w3.org/1999/xhtml', 'body']);
+            $w->raw ($output);
+            $w->endTag;
+            $w->endTag;
+        });
+}
+
 1;
 
 __END__
@@ -837,6 +864,11 @@ The pipe for the communication with the Nagios(tm) process.
 Nagios(tm) status file. This file contains the current state of all Nagios(tm)
 objects (defaults to /usr/local/nagios/var/status.dat).
 
+=item B<htmlify_msg>
+
+Pretty print messages received by the fifo. Currently only the status types
+(OK, WARNING, CRITICAL, UNKNOWN, UP, DOWN and UNREACHABLE) are colored.
+
 =item B<password>
 
 Logon password of the bot's JID.
@@ -864,6 +896,7 @@ Here is my configuration file:
     nagios_status_log_file: /opt/nagios/ver/status.log
     nagios_cmd_file: /opt/nagios/var/rw/nagios.cmd
     nagios_msg_fifo: /opt/nagios/var/rw/nagibot.fifo
+    htmlify_msg: 1
     bot_status: available
     bot_status_text: Ich bin ein bot, holt mich hier raus ...
     bot_status_priority: 0

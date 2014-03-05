@@ -1,3 +1,8 @@
+Wed  5 Mar 2014 14:14:19 CET - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
+    * Version 0.8.4
+    - In a MUC the bot responds to @nick and nick:
+    - Added htmlify_msg option
+
 Tue 20 Apr 2012 21:10:34 CEST - Andreas Jobs <andreas.jobs@ruhr-uni-bochum.de>
     * Version 0.8.3
     - The previous version wasn't packend and tagged correctly. No changes just
