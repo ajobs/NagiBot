@@ -1,10 +1,10 @@
-If you install on a Debian squeeze, prepare your system using the following
+If you install on a Debian stretch, prepare your system using the following
 commands:
 
-    aptitude install libyaml-perl libsys-cpuload-perl libanyevent-perl \
+    aptitude install make libyaml-perl libsys-cpuload-perl libanyevent-perl \
                      libxml-parser-perl libauthen-sasl-perl \
                      libnet-libidn-perl libobject-event-perl \
-                     libxml-writer-perl
+                     libxml-writer-perl libfile-pid-perl libanyevent-xmpp-perl
 
     cpan -i Nagios::Status::HostStatus
     cpan -i Nagios::Status::ServiceStatus
