@@ -35,6 +35,7 @@ use Sys::CpuLoad;
 use POSIX qw(setsid);
 use File::Pid;
 use HTML::Entities;
+use Encode;
 
 use vars qw($event $timer_event $io_event $connection $disco $muc $terminating);
 
@@ -53,6 +54,7 @@ $config_locations = '.,/etc,/usr/local/etc,/opt/local/etc,/opt/nagios/etc,/usr/l
     bot_status             => 'available',
     bot_status_priority    => 0,
     bot_status_text        => 'Listening',
+    incoming_charset       => 'UTF-8',
     nagios_cmd_file        => '/usr/local/nagios/var/rw/nagios.cmd',
     nagios_msg_fifo        => '/usr/local/nagios/var/rw/nagibot.fifo',
     nagios_status_log_file => '/usr/local/nagios/var/status.dat',
@@ -119,6 +121,9 @@ foreach my $k (keys %default) {
 #--- and adjust some values for internal use
 $config->{'password'}             = $password if $password;
 $config->{'bot_show_idle_after'} *= 60;
+
+#--- setup logging charset
+binmode STDOUT, ':encoding(UTF-8)';
 
 #--- daemonize
 if ($daemonize) {
@@ -269,6 +274,7 @@ $connection->connect ();
 
 print "Opening fifo for reading ...\n" if $verbose;
 open (FIFO, "+< " . $config->{'nagios_msg_fifo'}) or die "Cannot open fifo " . $config->{'nagios_msg_fifo'} .": $!";
+binmode FIFO, ':encoding(' . $config->{'incoming_charset'} . ')';
 
 
 $io_event = AnyEvent->io (
