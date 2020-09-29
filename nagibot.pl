@@ -59,6 +59,7 @@ $config_locations = '.,/etc,/usr/local/etc,/opt/local/etc,/opt/nagios/etc,/usr/l
     nagios_msg_fifo        => '/usr/local/nagios/var/rw/nagibot.fifo',
     nagios_status_log_file => '/usr/local/nagios/var/status.dat',
     htmlify_msg            => 0,
+    max_retry_interval     => 600,
 );
 
 %bot_command = (
@@ -164,6 +165,9 @@ $SIG{HUP}  = \&SignalHandler;
 # Add namespace for showing idle time
 AnyEvent::XMPP::Namespaces::set_xmpp_ns_alias('last', 'jabber:iq:last');
 
+my $endtime = time() + $config->{retry_timeout} if $config->{retry_timeout};
+my $tts = 2;
+
 until ($terminating) {
     $event = AnyEvent->condvar;
 
@@ -231,6 +235,10 @@ until ($terminating) {
             );
 
 	    &StartTimer($config->{'bot_show_idle_after'});
+	    
+	    # Reset reconnection parameters
+	    $endtime = time() + $config->{retry_timeout} if $config->{retry_timeout};
+	    $tts = 2;
         },
 
 	# On Receive
@@ -266,7 +274,10 @@ until ($terminating) {
         # On Disconnect
         disconnect => sub {
             my ($con, $h, $p, $reason) = @_;
-            print "Disconnected from $h:$p: $reason\n";
+	    if (defined($h) && defined($p)) {
+		$reason = "Disconnected from $h:$p: $reason";
+	    } 
+	    print "$reason\n";
             $event->send;
         },
 
@@ -321,6 +332,21 @@ until ($terminating) {
     undef $io_event;
     undef $timer_event;
     undef $connection;
+
+    last if $terminating;
+    if (defined($endtime) && time() > $endtime) {
+	print "Disconnected.  Giving up.\n";
+    }
+    
+    my $t = int(rand(0xffffffff)) % ($tts - 1) + 1;
+    print "Disconnected. Sleeping for $t seconds before retry...\n" if $verbose;
+    sleep($t);
+    if ($tts < $config->{max_retry_interval}) {
+	$tts <<= 1;
+	if ($tts < 0 || $tts > $config->{max_retry_interval}) {
+	    $tts = $config->{max_retry_interval};
+	}
+    }
 }
 
 print "Quitting.\n" if $verbose;
@@ -882,6 +908,26 @@ Logon password of the bot's JID.
 Name of the pid file if the bot forks into background. (defaults to 
 /var/run/nagibot/<local-part-of-jid>.pid)
 
+=item B<max_retry_interval>
+
+When B<nagibot> gets disconnected from the XMPP server, it tries to
+reconnect.  It can happen that the attempt to reconnect will fail too
+(e.g. if the remote server is down or heavy loaded).  In order to limit
+the use of system resources and minimize the eventual impact on the XMPP
+server, the interval between two subsequent failed reconnection attempts
+is selected as a random number between 1 and certain upper limit, which
+grows exponentially.  The initial value of that upper limit is 2 seconds.
+It gets doubled after each subsequent failure.  The B<max_retry_interval>
+parameter sets the maximum value for that limit, after which it is reset
+to 2 seconds.  The default value is 600 seconds.
+
+=item B<retry_timeout>    
+
+By default, B<nagibot> will retry connections to the XMPP server forever
+(see the description under B<max_retry_interval>).  Setting B<retry_interval>
+instructs it to give up after it is unable to connect to the server for
+that many seconds.
+    
 =back
 
 =head1 SAMPLE CONFIGURATION
