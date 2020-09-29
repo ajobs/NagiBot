@@ -164,164 +164,164 @@ $SIG{HUP}  = \&SignalHandler;
 # Add namespace for showing idle time
 AnyEvent::XMPP::Namespaces::set_xmpp_ns_alias('last', 'jabber:iq:last');
 
-CON:
-$event = AnyEvent->condvar;
+until ($terminating) {
+    $event = AnyEvent->condvar;
 
-$connection = AnyEvent::XMPP::IM::Connection->new (
-    jid => $jid,
-    password => $config->{'password'},
-    resource => $config->{'bot_resource'},
-    initial_presence => 0,
-);
+    $connection = AnyEvent::XMPP::IM::Connection->new (
+	jid => $jid,
+	password => $config->{'password'},
+	resource => $config->{'bot_resource'},
+	initial_presence => 0,
+    );
 
-$connection->reg_cb (
-    # On Connect
-    session_ready => sub {
-        my ($con) = @_;
-        print 'Connected as ' . $con->jid . "\n" if $verbose;
+    $connection->reg_cb (
+	# On Connect
+	session_ready => sub {
+	    my ($con) = @_;
+	    print 'Connected as ' . $con->jid . "\n" if $verbose;
 
-        print "Setting presence ...\n" if $verbose > 1;
-        $con->send_presence (
-            undef,
-            undef,
-            show => $config->{'bot_status'},
-            status => $config->{'bot_status_text'},
-            priority => $config->{'bot_status_priority'}
-        );
-
-        print "Joining rooms (if any) ...\n" if $verbose > 1;
-        $con->add_extension ($disco = AnyEvent::XMPP::Ext::Disco->new);
-        $con->add_extension (
-            $muc = AnyEvent::XMPP::Ext::MUC->new (disco => $disco, connection => $con)
-        );
-        for my $room (keys %$rooms) {
-            $muc->join_room (
-                $con,
-                $room,
-                $rooms->{$room},
-                timeout=>20,
-                create_instant => 0,
-                history => {stanzas => 0}
+            print "Setting presence ...\n" if $verbose > 1;
+            $con->send_presence (
+		undef,
+                undef,
+                show => $config->{'bot_status'},
+                status => $config->{'bot_status_text'},
+                priority => $config->{'bot_status_priority'}
             );
-        }
 
-        print "Register room message handler ...\n" if $verbose > 1;
-        $muc->reg_cb (
-            message => sub {
-                my ($con, $room, $msg, $is_echo) = @_;
+	    print "Joining rooms (if any) ...\n" if $verbose > 1;
+            $con->add_extension ($disco = AnyEvent::XMPP::Ext::Disco->new);
+            $con->add_extension (
+               $muc = AnyEvent::XMPP::Ext::MUC->new (
+		   disco => $disco,
+		   connection => $con
+	       )
+	    );
 
-                return if $is_echo;
+	    for my $room (keys %$rooms) {
+		$muc->join_room (
+		    $con,
+                    $room,
+                    $rooms->{$room},
+                    timeout => 20,
+                    create_instant => 0,
+                    history => {stanzas => 0}
+                );
+	    }
 
-                print "Message (" . $room->jid .") from " . $msg->from . ": " . $msg->any_body . "\n" if $verbose > 2;
+	    print "Register room message handler ...\n" if $verbose > 1;
+            $muc->reg_cb (
+		message => sub {
+		    my ($con, $room, $msg, $is_echo) = @_;
 
-                my $my_name = 'nagibot';
-                if (my $me = $room->get_me) {
-                    $my_name = lc $me->nick;
+                    return if $is_echo;
+
+                    print "Message (" . $room->jid .") from " . $msg->from . ": " . $msg->any_body . "\n" if $verbose > 2;
+
+                    my $my_name = 'nagibot';
+                    if (my $me = $room->get_me) {
+                        $my_name = lc $me->nick;
+                    }
+                    my $cmd = $1 if $msg->any_body =~ /^(?:\@$my_name|$my_name:)\s+(.*)$/i;
+                    return unless $cmd;
+                    &SetIdlePresence(0);
+                    &SendRoomMessage($room, &ProcessBotCommand ($msg->from, $cmd));
+                    &StartTimer($config->{'bot_show_idle_after'});
                 }
-                my $cmd = $1 if $msg->any_body =~ /^(?:\@$my_name|$my_name:)\s+(.*)$/i;
-                return unless $cmd;
-                &SetIdlePresence(0);
-                &SendRoomMessage($room, &ProcessBotCommand ($msg->from, $cmd));
-                &StartTimer($config->{'bot_show_idle_after'});
+            );
+
+	    &StartTimer($config->{'bot_show_idle_after'});
+        },
+
+	# On Receive
+	message => sub {
+	    my ($con, $msg) = @_;
+
+            return unless $msg->any_body;
+
+            my $from = $con->get_roster()->get_contact($msg->from);
+
+            print "Message from " , $msg->from , "(", $from->is_on_roster() ? "" : "NOT " , "on roster): " , $msg->any_body , "\n" if $verbose > 2;
+            return unless $from->is_on_roster;
+
+            &SetIdlePresence(0);
+            my $reply = $msg->make_reply;
+            $reply->add_body (&ProcessBotCommand($msg->from, $msg->any_body) => undef);
+            $reply->send($con);
+            &StartTimer($config->{'bot_show_idle_after'});
+        },
+
+        # On Error
+        error => sub {
+	    my ($con, $error) = @_;
+
+            warn "Error: " .  $error->string . "\n";
+        },
+        # On connect
+        connect => sub {
+            my ($con, $h, $p) = @_;
+            print "connected to $h:$p\n" if $verbose > 1;
+        },
+
+        # On Disconnect
+        disconnect => sub {
+            my ($con, $h, $p, $reason) = @_;
+            print "Disconnected from $h:$p: $reason\n";
+            $event->send;
+        },
+
+    );
+
+    print "Trying to connect ...\n" if $verbose;
+    $connection->connect ();
+
+    print "Opening fifo for reading ...\n" if $verbose;
+    open (FIFO, "+< " . $config->{'nagios_msg_fifo'}) or die "Cannot open fifo " . $config->{'nagios_msg_fifo'} .": $!";
+    binmode FIFO, ':encoding(' . $config->{'incoming_charset'} . ')';
+
+    $io_event = AnyEvent->io (
+	fh => \*FIFO,
+	poll => 'r',
+	cb => sub {
+	    return unless $connection->is_connected();
+
+            chomp (my $input = <FIFO>);
+            print "read: $input\n" if $verbose > 2;
+
+            # Reset idle presence
+            &SetIdlePresence(0);
+
+            # Send message to all rooms
+            foreach my $room (keys %$rooms) {
+		my $r = $muc->get_room($connection, $room);
+                unless ($r) {
+		    print "ERROR: Lost connection to the room $room";
+                    # TODO: Implement rejoin
+                    return;
+                }
+                my $msg =  $r->make_message (body => $input);
+                &HtmlifyMsg($msg, $input) if $config->{'htmlify_msg'};
+                $msg->send ();
             }
 
-        );
-
-        &StartTimer($config->{'bot_show_idle_after'});
-    },
-
-    # On Receive
-    message => sub {
-        my ($con, $msg) = @_;
-
-        return unless $msg->any_body;
-
-        my $from = $con->get_roster()->get_contact($msg->from);
-
-        print "Message from " , $msg->from , "(", $from->is_on_roster() ? "" : "NOT " , "on roster): " , $msg->any_body , "\n" if $verbose > 2;
-        return unless $from->is_on_roster;
-
-        &SetIdlePresence(0);
-        my $reply = $msg->make_reply;
-        $reply->add_body (&ProcessBotCommand($msg->from, $msg->any_body) => undef);
-        $reply->send($con);
-        &StartTimer($config->{'bot_show_idle_after'});
-    },
-
-    # On Error
-    error => sub {
-        my ($con, $error) = @_;
-
-        warn "Error: " .  $error->string . "\n";
-    },
-    # On connect
-    connect => sub {
-        my ($con, $h, $p) = @_;
-        print "connected to $h:$p\n" if $verbose > 1;
-    },
-
-    # On Disconnect
-    disconnect => sub {
-        my ($con, $h, $p, $reason) = @_;
-        print "Disconnected from $h:$p: $reason\n";
-        $event->send;
-    },
-
-);
-
-print "Trying to connect ...\n" if $verbose;
-$connection->connect ();
-
-print "Opening fifo for reading ...\n" if $verbose;
-open (FIFO, "+< " . $config->{'nagios_msg_fifo'}) or die "Cannot open fifo " . $config->{'nagios_msg_fifo'} .": $!";
-binmode FIFO, ':encoding(' . $config->{'incoming_charset'} . ')';
-
-
-$io_event = AnyEvent->io (
-    fh => \*FIFO, 
-    poll => 'r',
-    cb => sub {
-        return unless $connection->is_connected();
-
-        chomp (my $input = <FIFO>);
-        print "read: $input\n" if $verbose > 2;
-
-        # Reset idle presence
-        &SetIdlePresence(0);
-
-        # Send message to all rooms
-        foreach my $room (keys %$rooms) {
-            my $r = $muc->get_room($connection, $room);
-            unless ($r) {
-                print "ERROR: Lost connection to the room $room";
-                # TODO: Implement rejoin
-                return;
+            # send message to all users
+            foreach my $ujid (@$jids) {
+                my $msg =  AnyEvent::XMPP::IM::Message->new (to => $ujid, body => $input, type => 'chat');
+                &HtmlifyMsg($msg, $input) if $config->{'htmlify_msg'};
+                $msg->send ($connection);
             }
-            my $msg =  $r->make_message (body => $input);
-            &HtmlifyMsg($msg, $input) if $config->{'htmlify_msg'};
-            $msg->send ();
+
+            # Restart idle timer
+            &StartTimer($config->{'bot_show_idle_after'});
         }
+    );
 
-        # send message to all users
-        foreach my $ujid (@$jids) {
-            my $msg =  AnyEvent::XMPP::IM::Message->new (to => $ujid, body => $input, type => 'chat');
-            &HtmlifyMsg($msg, $input) if $config->{'htmlify_msg'};
-            $msg->send ($connection);
-        }
+    $event->wait;
 
-        # Restart idle timer
-        &StartTimer($config->{'bot_show_idle_after'});
-    }
-);
-
-$event->wait;
-
-undef $io_event;
-undef $timer_event;
-undef $connection;
-
-# reconnect ?
-goto CON unless ($terminating);
+    undef $io_event;
+    undef $timer_event;
+    undef $connection;
+}
 
 print "Quitting.\n" if $verbose;
 
